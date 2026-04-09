@@ -1,6 +1,6 @@
 import Link from "next/link";
-import Image from "next/image";
 import { ArrowRight, Presentation, BookOpen, Shield, Cable, LineChart } from "lucide-react";
+import { WorkshopPoster } from "@/components/WorkshopPoster";
 
 export default function Home() {
   return (
@@ -58,17 +58,8 @@ export default function Home() {
             </div>
           </div>
          </div>
-         <div className="hidden lg:block relative">
-           <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-[#375BD2]/20">
-             <Image
-               src="/workshop-poster.jpg"
-               alt="Workshop poster — Building Real-World Blockchain Applications with Chainlink"
-               width={600}
-               height={600}
-               className="w-full h-auto"
-               priority
-             />
-           </div>
+         <div className="relative flex justify-center lg:justify-end">
+           <WorkshopPoster />
          </div>
         </div>
       </section>
