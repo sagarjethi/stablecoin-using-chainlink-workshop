@@ -125,3 +125,43 @@ pre.code code {
 .reveal .progress {
   color: #4f74ec !important;
 }
+
+/* Prevent table / code / mermaid from clipping inside Reveal slides */
+.reveal section {
+  max-width: 100%;
+}
+.reveal table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.reveal pre {
+  overflow: auto;
+  max-width: 100%;
+}
+.reveal pre code {
+  white-space: pre;
+  word-wrap: normal;
+  overflow-x: auto;
+  display: block;
+}
+.reveal .mermaid-wrapper {
+  max-width: 100%;
+  overflow: auto;
+}
+.reveal .mermaid-wrapper svg {
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 520px;
+}
+.reveal blockquote {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Narrow viewport tightening */
+@media (max-width: 800px) {
+  .reveal h2 { font-size: 1.4em !important; }
+  .reveal table { font-size: 0.5em; }
+  .reveal pre { font-size: 0.42em !important; }
+}

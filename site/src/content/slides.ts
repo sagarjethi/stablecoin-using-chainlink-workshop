@@ -169,7 +169,7 @@ export const slides: Slide[] = [
       "Exogenous: collateral originates OUTSIDE the protocol. USDC ← USD. DAI ← ETH. If the stablecoin fails, the collateral keeps its value.",
       "Endogenous: collateral originates INSIDE the protocol. UST was backed by Luna — issued by Terra itself.",
       "The failure test: \"If the stablecoin fails, does the collateral also fail?\" Yes ⇒ endogenous.",
-      "Endogenous is capital-efficient but reflexive — if confidence drops, the whole thing spirals. Exactly how Terra lost $45B in a week (May 2022).",
+      "Endogenous is capital-efficient but reflexive — if confidence drops, the whole thing spirals. Exactly how Terra's LUNA + UST lost roughly $40B of combined market cap in a week (May 2022).",
     ],
   },
   {
@@ -183,7 +183,7 @@ export const slides: Slide[] = [
         ["DAI / USDS", "Pegged", "Algorithmic", "Exogenous (ETH, RWAs)", "CDP / over-collateralized"],
         ["RAI", "Floating", "Algorithmic", "Exogenous (ETH only)", "Minimal governance"],
         ["Frax (v3)", "Pegged", "Hybrid", "Mostly exogenous", "Moved to 100% CR"],
-        ["UST (dead)", "Pegged", "Algorithmic", "Endogenous (Luna)", "Collapsed May 2022 — $45B wiped"],
+        ["UST (dead)", "Pegged", "Algorithmic", "Endogenous (Luna)", "Collapsed May 2022 — ~$40B LUNA+UST wiped"],
       ],
     },
   },
@@ -200,7 +200,7 @@ export const slides: Slide[] = [
   K[Keeper] -.->|if health < 1| V`,
     bullets: [
       "Deposit $600 ETH → mint up to $300 DAI (200% CR). You owe DAI back.",
-      "Stability fee (≈2%/yr) accrues continuously. Protocol makes money.",
+      "Stability fee accrues continuously (set by Sky/Maker governance — has ranged from ~0% to 15%+ depending on market conditions). Protocol makes money.",
       "ETH tanks? Collateral ratio breaks → keeper liquidates you and takes the ETH.",
     ],
   },
@@ -210,7 +210,7 @@ export const slides: Slide[] = [
     bullets: [
       "UST was pegged, algorithmic, and 100% ENDOGENOUSLY collateralized by Luna.",
       "UST lost peg → Luna became unattractive → Luna price fell → UST peg got harder → Luna price fell more…",
-      "Death spiral. ~$45B in market cap gone in a week. May 2022.",
+      "Death spiral. Roughly $40B of combined LUNA + UST market cap gone in a week. May 2022.",
       "Lesson: endogenous collateral means the airbag is made of the same thing that's on fire.",
     ],
   },
@@ -232,7 +232,7 @@ export const slides: Slide[] = [
     columns: [
       {
         title: "Price Feeds",
-        body: "Tamper-resistant market data. Secures >$20T in DeFi. The reference oracle the entire industry has agreed on.",
+        body: "Tamper-resistant market data. Has enabled trillions in transaction value across DeFi (TVE). The reference oracle the industry has standardized on.",
       },
       {
         title: "Proof of Reserve",
