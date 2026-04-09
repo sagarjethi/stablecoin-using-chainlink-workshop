@@ -13,320 +13,300 @@ export type Slide = {
   quote?: string;
 };
 
-const PRICE_FEED_SNIPPET = `// Safe Chainlink read — never call latestRoundData() raw.
-function getPrice(AggregatorV3Interface feed, uint256 heartbeat)
-    internal view returns (uint256 price1e18)
-{
-    (uint80 roundId, int256 answer, , uint256 updatedAt, uint80 answeredInRound)
-        = feed.latestRoundData();
+const PRICE_FEED_SNIPPET = `// Read a price from Chainlink — safely.
+function getPrice(AggregatorV3Interface feed) internal view returns (uint256) {
+    (, int256 answer, , uint256 updatedAt, ) = feed.latestRoundData();
 
-    if (answer <= 0)               revert NegativeOrZeroPrice(answer);
-    if (updatedAt == 0)            revert ZeroUpdatedAt();
-    if (answeredInRound < roundId) revert IncompleteRound();
-    if (block.timestamp - updatedAt > heartbeat) revert StalePrice();
+    require(answer > 0, "price too low");
+    require(block.timestamp - updatedAt < 1 hours, "price too old");
 
-    uint8 d = feed.decimals();
-    uint256 raw = uint256(answer);
-    price1e18 = d < 18 ? raw * 10 ** (18 - d) : raw / 10 ** (d - 18);
+    // Chainlink USD feeds use 8 decimals. Scale up to 18.
+    return uint256(answer) * 1e10;
 }`;
 
-const HEALTH_FACTOR_SNIPPET = `// From Cyfrin DSCEngine.sol — Patrick Collins
-uint256 private constant LIQUIDATION_THRESHOLD = 50;   // 200% over-collateralized
-uint256 private constant LIQUIDATION_BONUS     = 10;   // 10% keeper bonus
-uint256 private constant MIN_HEALTH_FACTOR     = 1e18;
+const HEALTH_FACTOR_SNIPPET = `// From Cyfrin DSCEngine.sol — plain version.
 
-function _healthFactor(address user) private view returns (uint256) {
-    (uint256 totalDscMinted, uint256 collateralValueInUsd) = _getAccountInformation(user);
-    if (totalDscMinted == 0) return type(uint256).max;
-    uint256 collateralAdjusted = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / 100;
-    return (collateralAdjusted * 1e18) / totalDscMinted;
+// You need $200 of ETH to mint $100 of DSC (200% collateral).
+uint256 constant LIQUIDATION_THRESHOLD = 50;
+uint256 constant LIQUIDATION_BONUS     = 10;   // 10% bonus for liquidators
+uint256 constant MIN_HEALTH_FACTOR     = 1e18;
+
+function healthFactor(address user) public view returns (uint256) {
+    uint256 dscMinted   = s_DSCMinted[user];
+    uint256 collateralUsd = getCollateralValue(user);
+    if (dscMinted == 0) return type(uint256).max;
+    return (collateralUsd * 50 / 100) * 1e18 / dscMinted;
 }
 
-function liquidate(address collateral, address user, uint256 debtToCover) external {
-    if (_healthFactor(user) >= MIN_HEALTH_FACTOR) revert HealthFactorOk();
-    uint256 tokenFromDebt = getTokenAmountFromUsd(collateral, debtToCover);
-    uint256 bonus        = (tokenFromDebt * LIQUIDATION_BONUS) / 100;
-    _redeemCollateral(collateral, tokenFromDebt + bonus, user, msg.sender);
-    _burnDsc(debtToCover, user, msg.sender);
-}`;
+// If your health factor falls below 1, anyone can liquidate you.
+// They pay your debt, take your collateral, and get a 10% bonus.`;
 
 export const slides: Slide[] = [
   {
     id: "title",
-    title: "Building Real-World Blockchain Applications with Chainlink",
+    title: "Building Real-World Blockchain Apps with Chainlink",
     subtitle: "Nirma University · April 9, 2026 · 1:15 – 3:00 PM IST",
     footer: "Sagar Jethi · Chainlink Community Advocate · Founder, Codeminto",
     image: { src: "/workshop-poster.jpg", alt: "Workshop poster", width: 340 },
   },
   {
     id: "agenda",
-    title: "What we'll cover today",
+    title: "What we'll do today",
     bullets: [
-      "1 — A 2-minute tour of DeFi: where Chainlink fits in.",
-      "2 — What a stablecoin really is (hint: it's not just 'pegged to the dollar').",
-      "3 — The 3 axes that actually categorize stablecoins.",
-      "4 — How DAI works, why UST collapsed, and why people really mint them.",
-      "5 — Build along: a Chainlink-priced, over-collateralized DSC stablecoin in Foundry.",
-      "6 — Stretch: take it cross-chain with Chainlink CCIP.",
+      "1 — A quick tour of DeFi and where Chainlink fits.",
+      "2 — What a stablecoin really is.",
+      "3 — Simple ways to group stablecoins.",
+      "4 — How DAI works and why UST died.",
+      "5 — We build a stablecoin together using Chainlink + Foundry.",
+      "6 — Bonus: send it across chains with CCIP.",
     ],
   },
   {
     id: "defi-intro",
-    title: "Welcome to DeFi",
+    title: "What is DeFi?",
     bullets: [
-      "Permissionless, open-source finance — no bank, no broker, no gatekeeper.",
-      "DeFiLlama tracks the top protocols by TVL: Lido, Aave, MakerDAO/Sky, Curve, Uniswap.",
-      "Aave = permissionless lending. Uniswap = permissionless DEX. Maker/Sky = the stablecoin.",
-      "DeFi gives everyday users access to sophisticated financial instruments — but only if the on-chain data is honest. That's where oracles come in.",
+      "DeFi = Decentralized Finance.",
+      "It's finance without banks or middlemen. Just smart contracts.",
+      "You can lend, borrow, trade, and save — anywhere, any time.",
+      "Top apps: Aave (lending), Uniswap (swapping), Sky/Maker (stablecoin).",
+      "But smart contracts need real-world data to work. That's what Chainlink gives us.",
     ],
-    footer: "defillama.com · aave.com · sky.money · uniswap.org",
   },
   {
     id: "what-is-stablecoin",
-    title: "What is a stablecoin, really?",
+    title: "What is a stablecoin?",
     bullets: [
-      "Most articles say: \"a crypto pegged to the dollar.\" That's half the story.",
-      "Better definition (Patrick Collins): a crypto asset whose buying power stays relatively stable.",
-      "\"Pegged\" is ONE way to achieve stability — not the definition itself.",
-      "A floating stablecoin can actually be more stable than a pegged one over long time horizons.",
+      "Most people say: \"a crypto worth $1.\" That's only half right.",
+      "A better answer: a crypto whose buying power stays stable.",
+      "Being \"pegged\" to the dollar is just ONE way to do this.",
+      "Some stablecoins don't track the dollar at all — they just keep their value.",
     ],
-    quote: "\"A stablecoin is a crypto asset whose buying power fluctuates very little relative to the rest of the market.\"",
+    quote: "\"A stablecoin is a crypto asset whose buying power stays the same.\"",
   },
   {
     id: "buying-power",
-    title: "Buying power — the apple analogy",
+    title: "Apple example — what \"stable\" means",
     bullets: [
-      "Go to the market and buy 10 apples with $10 today.",
-      "Come back in 5 years: $10 might only buy 5 apples. That's inflation — USD buying power fell.",
-      "An asset whose $10 always buys 10 apples has stable buying power — even if its USD price moves.",
-      "Bitcoin's buying power swings wildly. Fiat's drifts slowly. A good stablecoin keeps it flat.",
+      "Today: $10 buys you 10 apples.",
+      "In 5 years: $10 might only buy 5 apples. Your money lost power.",
+      "A good stablecoin still buys 10 apples in 5 years.",
+      "Bitcoin can't do this — its price jumps around too much.",
+      "So we need a coin that holds its value.",
     ],
   },
   {
     id: "why-care",
-    title: "Why we need them — the 3 functions of money",
+    title: "Why do we need them? Money does 3 things",
     columns: [
-      {
-        title: "Store of value",
-        body: "Keep wealth over time without rotting (apples) or crashing 30% overnight (BTC).",
-      },
-      {
-        title: "Unit of account",
-        body: "Price things in it. Labeling a coffee '0.00003 BTC' is useless — it changes every minute.",
-      },
-      {
-        title: "Medium of exchange",
-        body: "Transact with it easily. Everyone accepts it, it settles fast, it doesn't fragment liquidity.",
-      },
+      { title: "Save", body: "Hold your wealth without losing it overnight." },
+      { title: "Measure", body: "Put prices on things. Coffee = $3, not 0.00003 BTC." },
+      { title: "Spend", body: "Pay people easily. Everyone takes it." },
     ],
-    footer: "Web3 needs on-chain money that performs all three. That's the job description.",
+    footer: "Web3 needs a coin that does all 3. That's why stablecoins exist.",
   },
   {
     id: "categorization",
-    title: "How to categorize stablecoins — 3 axes",
+    title: "Simple way to group stablecoins",
     bullets: [
-      "Forget the old \"fiat / crypto / commodity / algo\" buckets — they paint an inaccurate picture.",
-      "Axis 1 — Relative stability: Pegged  ←→  Floating",
-      "Axis 2 — Stability method: Governed  ←→  Algorithmic",
-      "Axis 3 — Collateral type: Exogenous  ←→  Endogenous",
-      "Every stablecoin is a point in this 3-D space. Let's walk through each axis.",
+      "Forget the old lists (fiat, crypto, commodity, algo) — they're confusing.",
+      "Ask 3 simple questions instead:",
+      "1 — Does it track something, or float on its own?",
+      "2 — Does a person control it, or does code control it?",
+      "3 — Is the backing from outside the coin, or from inside?",
     ],
   },
   {
     id: "axis-stability",
-    title: "Axis 1 — Pegged vs Floating",
+    title: "Question 1 — Pegged or Floating?",
     columns: [
       {
-        title: "Pegged / Anchored",
-        body: "Tracks a specific asset (usually $1). USDC, USDT, DAI. Simple mental model. Fails if the anchor drifts.",
+        title: "Pegged",
+        body: "Tracks another asset like the US dollar. Example: USDC, USDT, DAI. Always aims for $1.",
       },
       {
         title: "Floating",
-        body: "Maintains stable buying power without tracking a specific asset. RAI is the canonical example.",
+        body: "Doesn't track anything — it just tries to keep its buying power. Example: RAI.",
       },
     ],
-    footer: "Anchor vs buoy: which is more stable? Depends on what you're comparing it to.",
   },
   {
     id: "axis-method",
-    title: "Axis 2 — Governed vs Algorithmic",
+    title: "Question 2 — Who controls it?",
     columns: [
       {
-        title: "Governed",
-        body: "A human entity (or DAO) controls mint/burn. USDC is maximally governed — Circle does it. Fast, trusted, centralized.",
+        title: "Person / Company",
+        body: "A team prints and burns the coin. USDC works this way — Circle runs it. Fast but centralized.",
       },
       {
-        title: "Algorithmic",
-        body: "A permissionless algorithm mints and burns with no human intervention. DAI, RAI, UST — all far on this side.",
+        title: "Code only",
+        body: "No humans. Just smart contracts. DAI and RAI work this way. Slower, but trustless.",
       },
     ],
-    footer: "⚠ \"Algorithmic\" does NOT mean \"under-collateralized\" — media conflates these constantly.",
+    footer: "\"Code only\" does NOT mean \"risky\" — news often gets this wrong.",
   },
   {
     id: "axis-collateral",
-    title: "Axis 3 — Exogenous vs Endogenous collateral",
+    title: "Question 3 — What is it backed by?",
     bullets: [
-      "Exogenous: collateral originates OUTSIDE the protocol. USDC ← USD. DAI ← ETH. If the stablecoin fails, the collateral keeps its value.",
-      "Endogenous: collateral originates INSIDE the protocol. UST was backed by Luna — issued by Terra itself.",
-      "The failure test: \"If the stablecoin fails, does the collateral also fail?\" Yes ⇒ endogenous.",
-      "Endogenous is capital-efficient but reflexive — if confidence drops, the whole thing spirals. Exactly how Terra's LUNA + UST lost roughly $40B of combined market cap in a week (May 2022).",
+      "Outside backing: backed by something that exists without the coin. USDC is backed by dollars. DAI is backed by ETH.",
+      "Inside backing: backed by its own token. UST was backed by LUNA — made by the same project.",
+      "Simple test: \"If the coin dies, does the backing also die?\"",
+      "If yes → inside backing → dangerous.",
+      "That's how UST + LUNA lost about $40 BILLION in one week (May 2022).",
     ],
   },
   {
     id: "top-coins",
-    title: "Top stablecoins through the 3 axes",
+    title: "Top stablecoins at a glance",
     table: {
-      headers: ["Coin", "Peg", "Method", "Collateral", "Notes"],
+      headers: ["Coin", "Tracks $1?", "Controlled by", "Backed by"],
       rows: [
-        ["USDC", "Pegged", "Governed", "Exogenous (USD)", "Centralized, deep liquidity"],
-        ["USDT", "Pegged", "Governed", "Exogenous (USD+T-bills)", "Largest by mcap"],
-        ["DAI / USDS", "Pegged", "Algorithmic", "Exogenous (ETH, RWAs)", "CDP / over-collateralized"],
-        ["RAI", "Floating", "Algorithmic", "Exogenous (ETH only)", "Minimal governance"],
-        ["Frax (v3)", "Pegged", "Hybrid", "Mostly exogenous", "Moved to 100% CR"],
-        ["UST (dead)", "Pegged", "Algorithmic", "Endogenous (Luna)", "Collapsed May 2022 — ~$40B LUNA+UST wiped"],
+        ["USDC", "Yes", "Circle (company)", "Real US dollars"],
+        ["USDT", "Yes", "Tether (company)", "Dollars + T-bills"],
+        ["DAI / USDS", "Yes", "Code", "ETH and other crypto"],
+        ["RAI", "Floats", "Code", "Only ETH"],
+        ["UST (dead)", "Tried to", "Code", "LUNA (itself) — died"],
       ],
     },
   },
   {
     id: "dai-how",
-    title: "How DAI works — a CDP walkthrough",
+    title: "How DAI works — in 5 steps",
     mermaid: `flowchart LR
-  U[User] -->|1. deposit ETH| V[Vault / CDP]
-  V -->|2. mint DAI up to max| U
-  PF[Chainlink ETH/USD] -->|marks value each block| V
-  V -->|3. stability fee accrues| T[Treasury]
-  U -->|4. repay DAI + fee| V
-  V -->|5. unlock ETH| U
-  K[Keeper] -.->|if health < 1| V`,
+  U[User] -->|1. put in ETH| V[Vault]
+  V -->|2. get DAI| U
+  PF[Chainlink ETH/USD] -->|checks price| V
+  U -->|3. pay back DAI| V
+  V -->|4. get ETH back| U
+  K[Keeper] -.->|if you fail| V`,
     bullets: [
-      "Deposit $600 ETH → mint up to $300 DAI (200% CR). You owe DAI back.",
-      "Stability fee accrues continuously (set by Sky/Maker governance — has ranged from ~0% to 15%+ depending on market conditions). Protocol makes money.",
-      "ETH tanks? Collateral ratio breaks → keeper liquidates you and takes the ETH.",
+      "Put in $600 of ETH → you can borrow up to $300 of DAI.",
+      "You owe that DAI back. You also pay a small yearly fee.",
+      "If ETH price drops too much, someone else takes your ETH and pays off your DAI. This is called liquidation.",
     ],
   },
   {
     id: "ust-lesson",
-    title: "The UST / Luna collapse — one slide",
+    title: "The UST / LUNA disaster — what we learned",
     bullets: [
-      "UST was pegged, algorithmic, and 100% ENDOGENOUSLY collateralized by Luna.",
-      "UST lost peg → Luna became unattractive → Luna price fell → UST peg got harder → Luna price fell more…",
-      "Death spiral. Roughly $40B of combined LUNA + UST market cap gone in a week. May 2022.",
-      "Lesson: endogenous collateral means the airbag is made of the same thing that's on fire.",
+      "UST was backed by LUNA. Both were made by the same project.",
+      "UST lost its $1 peg → people dumped LUNA → LUNA crashed → UST crashed more.",
+      "This is called a death spiral.",
+      "About $40 billion gone in a week. May 2022.",
+      "Lesson: if a coin is only backed by its own token, it can die fast.",
     ],
   },
   {
     id: "real-reason",
-    title: "So why are stablecoins REALLY minted?",
+    title: "Why do people really mint stablecoins?",
     bullets: [
-      "Average users don't mint DAI to buy coffee — they just buy it on an exchange.",
-      "Protocols charge a stability fee. Nobody pays 2% per year just for \"the 3 functions of money.\"",
-      "The real answer: LEVERAGED INVESTING.",
-      "I'm long ETH → I deposit ETH → mint DAI → buy more ETH → deposit that too → repeat.",
-      "Stablecoins are good for the people. But they're MINTED because whales want leverage on their bags.",
+      "You don't need to mint DAI to buy coffee — you can just buy DAI.",
+      "And minting costs a yearly fee. So why do people do it?",
+      "The real answer: to bet bigger on crypto.",
+      "Example: I have ETH → I lock it → mint DAI → buy more ETH → lock that too → repeat.",
+      "This is called leverage. Stablecoins are good for everyone, but they're mostly minted by traders.",
     ],
-    quote: "\"Why are stable coins minted? Because investors want to make leveraged bets.\" — Patrick Collins",
+    quote: "\"Stablecoins are minted because investors want to bet big.\" — Patrick Collins",
   },
   {
     id: "why-chainlink",
-    title: "Why Chainlink for stablecoins?",
+    title: "Why use Chainlink?",
     columns: [
       {
         title: "Price Feeds",
-        body: "Tamper-resistant market data. Has enabled trillions in transaction value across DeFi (TVE). The reference oracle the industry has standardized on.",
+        body: "Real-world prices on-chain. Used by almost every DeFi app.",
       },
       {
         title: "Proof of Reserve",
-        body: "On-chain attestation of off-chain collateral. Turn opaque attestations into an automatic mint gate.",
+        body: "Proves the coin has real backing. Stops over-minting.",
       },
       {
         title: "CCIP",
-        body: "Cross-Chain Interoperability Protocol. Move your stablecoin across 20+ chains with burn-and-mint.",
+        body: "Send tokens across different chains safely.",
       },
     ],
   },
   {
     id: "our-build",
-    title: "Our workshop build — DSC",
+    title: "What we'll build — DSC",
     bullets: [
-      "Decentralized Stable Coin — the one Patrick Collins builds in the Cyfrin course.",
-      "Relative stability: Anchored to USD via Chainlink price feeds.",
-      "Stability method: Algorithmic — no humans mint or burn, only code.",
-      "Collateral type: Exogenous — wETH and wBTC only.",
-      "Mechanism: over-collateralized CDP with on-chain liquidations at 200% CR.",
+      "DSC = Decentralized Stable Coin.",
+      "Built in the Cyfrin Foundry course by Patrick Collins.",
+      "It tracks $1 using Chainlink.",
+      "It's controlled only by code.",
+      "You back it with wETH or wBTC.",
+      "You must put in $200 of crypto for every $100 of DSC (200% safety).",
     ],
     footer: "github.com/Cyfrin/foundry-defi-stablecoin-cu",
   },
   {
     id: "dsc-architecture",
-    title: "DSC architecture",
+    title: "How our stablecoin works",
     mermaid: `flowchart LR
-  U[User] -->|deposit wETH / wBTC| E[DSCEngine]
+  U[User] -->|put in wETH / wBTC| E[DSCEngine]
   E -->|mint DSC| U
   PF1[Chainlink wETH/USD] --> E
   PF2[Chainlink wBTC/USD] --> E
-  E -.->|health < 1| L[Liquidator]
-  L -->|burns DSC, takes collateral + 10% bonus| E
-  E -->|mint / burn| DSC[DecentralizedStableCoin ERC-20]`,
+  E -.->|if unsafe| L[Liquidator]
+  L -->|pays debt, takes collateral| E`,
     bullets: [
-      "DSCEngine holds the logic. DecentralizedStableCoin is a dumb ERC-20 the engine owns.",
-      "Every collateral token has its own Chainlink price feed, registered at constructor time.",
-      "Liquidation is permissionless: anyone can call liquidate() on an unhealthy vault and earn a 10% bonus.",
+      "DSCEngine is the brain. It handles all the rules.",
+      "DSC is just a normal ERC-20 token. The engine mints and burns it.",
+      "Chainlink tells us how much your crypto is worth.",
+      "If you become unsafe, anyone can pay your debt and take your crypto + 10% bonus.",
     ],
   },
   {
     id: "price-feed-code",
-    title: "Chainlink Price Feed — safe read",
+    title: "Reading a price safely",
     code: {
       language: "solidity",
       content: PRICE_FEED_SNIPPET,
-      caption: "4 safety checks · Sepolia ETH/USD: 0x694AA1769357215DE4FAC081bf1f309aDC325306 (8 dec, 3600s heartbeat)",
+      caption: "Always check: is the price > 0? Is it fresh? Sepolia ETH/USD: 0x694AA1769357215DE4FAC081bf1f309aDC325306",
     },
   },
   {
     id: "health-factor",
-    title: "Health factor & liquidation",
+    title: "Health factor — are you safe?",
     code: {
       language: "solidity",
       content: HEALTH_FACTOR_SNIPPET,
-      caption: "Health factor = (collateralUSD × 50 / 100) × 1e18 / totalDscMinted. < 1e18 ⇒ liquidatable.",
+      caption: "If health factor drops below 1, you can be liquidated.",
     },
   },
   {
     id: "ccip-banner",
-    title: "Building Cross-Chain dApps with Chainlink CCIP",
-    subtitle: "Move value and messages across 20+ chains, securely.",
+    title: "Going cross-chain with Chainlink CCIP",
+    subtitle: "Move your stablecoin across 20+ blockchains safely.",
     image: { src: "/ccip-banner.png", alt: "Chainlink CCIP", width: 780 },
   },
   {
     id: "ccip",
-    title: "CCIP burn-and-mint",
+    title: "How CCIP works — burn here, mint there",
     mermaid: `sequenceDiagram
   participant U as User
   participant SC as DSC (Sepolia)
-  participant B1 as CCIPBridge (Sepolia)
-  participant R1 as Router (Sepolia)
+  participant B1 as Bridge (Sepolia)
   participant CCIP as CCIP Network
-  participant R2 as Router (Fuji)
-  participant B2 as CCIPBridge (Fuji)
+  participant B2 as Bridge (Fuji)
   participant SC2 as DSC (Fuji)
-  U->>SC: approve + transfer
-  B1->>SC: bridgeBurn(amount)
-  B1->>R1: ccipSend(destSelector, msg)
-  R1->>CCIP: route + sign
-  CCIP->>R2: deliver
-  R2->>B2: _ccipReceive
-  B2->>SC2: bridgeMint(recipient, amount)
-  SC2-->>U: tokens on Fuji`,
+  U->>SC: send 100 DSC
+  B1->>SC: burn 100 DSC
+  B1->>CCIP: send message
+  CCIP->>B2: deliver message
+  B2->>SC2: mint 100 DSC
+  SC2-->>U: 100 DSC on Fuji`,
     bullets: [
-      "Allowlist source chain selector + sender — never trust raw _ccipReceive input.",
-      "Pre-fund LINK in the bridge and approve the router for the exact fee from getFee().",
-      "Track every message live on https://ccip.chain.link.",
+      "Step 1: burn the tokens on chain A.",
+      "Step 2: CCIP sends a message to chain B.",
+      "Step 3: chain B mints the same amount for you.",
+      "No real tokens move — they're burned and recreated. Safer this way.",
     ],
   },
   {
     id: "lets-build",
-    title: "Let's build it",
-    subtitle: "Open the Workshop tab and follow along step-by-step.",
+    title: "Let's build it!",
+    subtitle: "Open the Workshop tab and code along with us.",
     cta: { label: "Open the workshop guide →", href: "/workshop" },
   },
 ];
