@@ -39,6 +39,15 @@ export default function Home() {
               Workshop guide
               <ArrowRight className="h-4 w-4" />
             </Link>
+            <a
+              href="https://github.com/sagarjethi/stablecoin-contract"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 px-5 py-3 text-sm font-semibold text-emerald-200 transition"
+            >
+              Clone the template
+              <ArrowRight className="h-4 w-4" />
+            </a>
           </div>
 
           <div className="mt-12 flex flex-wrap items-center gap-8 text-sm text-white/55">

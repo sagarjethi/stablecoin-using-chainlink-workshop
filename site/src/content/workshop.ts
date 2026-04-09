@@ -255,8 +255,9 @@ open https://faucets.chain.link`,
     body: ["Clone the workshop repo and install Foundry dependencies."],
     code: {
       language: "bash",
-      content: `git clone https://github.com/YOUR_ORG/chainlink-workshop
-cd chainlink-workshop/practical
+      content: `# Clone the workshop template — this is what we fill in together today
+git clone https://github.com/sagarjethi/stablecoin-contract
+cd stablecoin-contract
 
 forge install \\
   smartcontractkit/chainlink-brownie-contracts \\
@@ -400,6 +401,7 @@ forge script script/Deploy.s.sol:Deploy \\
     title: "Resources",
     body: ["Bookmark these — you'll need them after the workshop."],
     links: [
+      { label: "🚀 Workshop contract template (clone this!)", href: "https://github.com/sagarjethi/stablecoin-contract" },
       { label: "Workshop slides (Google Slides)", href: "https://docs.google.com/presentation/d/1MxWReYythS59-lydwZTAyFBHFtyy7EsYC5vrXfO72aQ/edit" },
       { label: "Workshop handout (Google Doc)", href: "https://docs.google.com/document/d/16oTtgst9uqZS7bk8Ej4tL-Ew6-e-UxzC4rJ8B3iBPVM/edit" },
       { label: "Feedback form", href: "https://docs.google.com/forms/d/e/1FAIpQLSfqXZHnMvLgNrbaoKOrR8KPB0Ou-JKhMyFTfOLDDslILGGPWQ/viewform" },
